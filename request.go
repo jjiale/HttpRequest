@@ -166,7 +166,13 @@ func parseQuery(url string) ([]string, error) {
 		if len(v) < 2 {
 			return make([]string, 0), errors.New("query parameter error")
 		}
-		query = append(query, fmt.Sprintf("%s=%s", v[0], v[1]))
+			
+		// = On the right side has =
+		str := ""
+		for a := 2; a < len(v); a++ {
+			str += "=" + v[a]
+		}
+		query = append(query, fmt.Sprintf("%s=%s%s", v[0], v[1], str))
 	}
 	return query, nil
 }
