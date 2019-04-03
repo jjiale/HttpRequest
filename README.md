@@ -1,173 +1,181 @@
-# HttpRequest
-A simple HTTP Request package for golang.
+HttpRequest
+=======
+A simple `HTTP Request` package for golang. `GET` `POST` `DELETE` `PUT` `Upload`
 
 
 
-## Installation
-
-```
+### Installation
 go get github.com/kirinlabs/HttpRequest
+
+
+### How do we use HttpRequest?
+
+Create request object
+```go
+req := HttpRequest.NewRequest()
 ```
 
-## Example
-
+Keep Alives
+```go
+req.DisableKeepAlives(false)
 ```
-package main
 
-import (
-	"github.com/kirinlabs/HttpRequest"
-	"fmt"
-)
+Ignore Https certificate validation
+```go
+req.SetTLSClient(&tls.Config{InsecureSkipVerify: true})
+```
 
-func main() {
-    req := HttpRequest.NewRequest()
+Set headers
+```go
+req.SetHeaders(map[string]string{
+    "Content-Type": "application/x-www-form-urlencoded",
+})
+```
 
-    req.DisableKeepAlives(false)
+Set cookies
+```go
+req.SetCookies(map[string]string{
+    "name":"json",
+})
+```
 
-    req.SetTLSClient(&tls.Config{InsecureSkipVerify: true}) //Ignore Https certificate validation
+Set timeout
+```go
+req.SetTimeout(5)  //default 30s
+```
 
-    req.SetHeaders(map[string]string{
-    	"Content-Type": "application/x-www-form-urlencoded",
-    })
+Object-oriented operation mode
+```go
+req := HttpRequest.NewRequest().Debug(true).SetHeaders(map[string]string{
+    "Content-Type": "application/x-www-form-urlencoded",
+}).SetTimeout(5)
+res,err := HttpRequest.NewRequest().Get("http://127.0.0.1:8000?id=10&title=HttpRequest",nil)
+```
 
-    req.SetCookies(map[string]string{
-    	"name":      "json",
-    })
+### GET
 
-    req.SetTimeout(5)  //default 30s
+Query parameter
+```go
+res, err := req.Get("http://127.0.0.1:8000?id=10&title=HttpRequest",nil)
+```
 
-    -------------------------------------------------------------------------
-    req := HttpRequest.NewRequest().Debug(true).SetHeaders(map[string]string{
-           "Content-Type": "application/x-www-form-urlencoded",
-    }).SetTimeout(5)
-    -------------------------------------------------------------------------
+
+Multi parameter,url will be rebuild to `http://127.0.0.1:8000?id=10&title=HttpRequest&name=jason&score=100`
+```go
+res, err := req.Get("http://127.0.0.1:8000?id=10&title=HttpRequest",map[string]interface{}{
+    "name":  "jason",
+    "score": 100,
+})
+body, err := res.Body()
+if err != nil {
+    return
+}
+return string(body)
+```
+
+
+### POST
+
+```go
+res, err := req.Post("http://127.0.0.1:8000", map[string]interface{}{
+    "id":    10,
+    "title": "HttpRequest",
+})
+body, err := res.Body()
+if err != nil {
+    return
+}
+return string(body)
+```
+
+
+### Upload
+Params: url, filename, fileinput
+
+```go
+res, err := req.Upload("http://127.0.0.1:8000/upload", "/root/demo.txt","uploadFile")
+body, err := res.Body()
+if err != nil {
+    return
+}
+return string(body)
+```
+
+
+### Debug
+Default false
+
+```go
+req.Debug(true)
+```
+
+Print in standard output：
+```go
+[HttpRequest]
+-------------------------------------------------------------------
+Request: GET http://127.0.0.1:8000?name=iceview&age=19&score=100
+Headers: map[Content-Type:application/x-www-form-urlencoded]
+Cookies: map[]
+Timeout: 30s
+BodyMap: map[age:19 score:100]
+-------------------------------------------------------------------
+```
+
+
+## Json
+Post JSON request
+
+Set header
+```go
+ req.SetHeaders(map[string]string{"Content-Type": "application/json"})
+```
+
+Post request
+```go
+res, err := req.Post("http://127.0.0.1:8000", map[string]interface{}{
+    "id":    10,
+    "title": "HttpRequest",
+})
+```
+
+Print JSON
+```go
+body, err := res.Json()
+if err != nil {
+   return
 }
 ```
 
-## Get
+### Response
 
-```
-  res, err := req.Get("http://127.0.0.1:8000?id=10&title=HttpRequest",nil)
-
-  res, err := req.Get("http://127.0.0.1:8000?id=10&title=HttpRequest",map[string]interface{}{
-       "name":  "jason",
-           "score": 100,
-  })
-
-  //Rebuild url to http://127.0.0.1:8000?id=10&title=HttpRequest&name=jason&score=100
-
-  body, err := res.Body()
-  if err != nil {
-     log.Println(err)
-     return
-  }
-
-  fmt.Println(string(body))
-
-  fmt.Println(res.Json(body))   //Output json format
+Response() *http.Response
+```go
+res, err := req.Post("http://127.0.0.1:8000/",nil) //res is a http.Response object
 ```
 
-
-## Post
-
-```
-  res, err := req.Post("http://127.0.0.1:8000", map[string]interface{}{
-      	"id":    10,
-      	"title": "HttpRequest",
-      })
-
-  if err != nil {
-     log.Println(err)
-     return
-  }
-
-  body, err := res.Body()
-  if err != nil {
-     log.Println(err)
-     return
-  }
-
-  fmt.Println(string(body))
-
-  fmt.Println(res.Json(body))   //Output json format
+StatusCode() int
+```go
+res.StatusCode()
 ```
 
-
-
-## Debug
-
-```
-  req := HttpRequest.NewRequest()
-  req.Debug(true)       //Default false
+Body() ([]byte, error)
+```go
+body, err := res.Body()
+log.Println(string(body))
 ```
 
-```
-  Print in standard output：
-
-  [HttpRequest]
-  -------------------------------------------------------------------
-  Request: GET http://127.0.0.1:8000?name=iceview&age=19&score=100
-  Headers: map[Content-Type:application/x-www-form-urlencoded]
-  Cookies: map[]
-  Timeout: 30s
-  BodyMap: map[age:19 score:100]
-  -------------------------------------------------------------------
+Time() string
+```go
+res.Time()  //ms
 ```
 
-
-## Send json request
-
-```
-  req.SetHeaders(map[string]string{
-      	"Content-Type": "application/json",
-  })
-
+Json() (string,error)
+```go
+body, err := res.Json() //Format the json return value
+log.Println(body)
 ```
 
-## Request
-
-```
-  Get(url string, nil)
-
-  Get(url string, body map[string]interface{})
-```
-
-```
-  Post(url string, body map[string]interface{})
-```
-
-```
-  Delete(url string, nil)
-
-  Delete(url string, body map[string]interface{})
-```
-
-```
-  Put(url string, body map[string]interface{})
-```
-
-
-## Public function
-
-```
-  SetHeaders(header map[string]string)
-
-  SetCookies(header map[string]string)
-
-  SetTimeout(d time.Duration)
-```
-
-
-## Response
-
-```
-  Response() *http.Response
-
-  StatusCode() int
-
-  Body() ([]byte, error)
-
-  Time() string
-  
-  Json(v []byte) (string,error)
+Url() string
+```go
+res.Url()  //return the requested url
 ```
