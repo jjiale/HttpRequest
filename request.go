@@ -233,6 +233,9 @@ func (r *Request) Get(url string, data map[string]interface{}) (*Response, error
 // Post is a post http request
 func (r *Request) Post(url string, data map[string]interface{}) (*Response, error) {
 	if r.headers["Content-Type"] == "" {
+		if len(r.headers) == 0 {
+		    r.headers = make(map[string]string)
+		}
 		r.SetHeaders(map[string]string{"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"})
 	}
 	return r.request(http.MethodPost, url, data)
