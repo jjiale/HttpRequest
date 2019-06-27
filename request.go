@@ -167,6 +167,7 @@ func parseQuery(url string) ([]string, error) {
 	for _, val := range strings.Split(urlList[1], "&") {
 		v := strings.Split(val, "=")
 		if len(v) < 2 {
+			continue
 			return make([]string, 0), errors.New("query parameter error")
 		}
 			
