@@ -333,6 +333,11 @@ func (r *Request) request(method, url string, data ...interface{}) (*Response, e
 	}
 
 	req, err = http.NewRequest(method, url, body)
+
+	if host, ok := r.headers["Host"]; ok {
+		req.Host = host
+	}
+
 	if err != nil {
 		return nil, err
 	}
