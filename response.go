@@ -57,18 +57,6 @@ func (r *Response) Cookies() []*http.Cookie {
 	return []*http.Cookie{}
 }
 
-func (r *Response) Headers() map[string]string {
-	headers := make(map[string]string)
-	for k, v := range r.resp.Header {
-		if len(v) > 0 {
-			headers[k] = v[len(v)-1]
-		} else {
-			headers[k] = ""
-		}
-	}
-	return headers
-}
-
 func (r *Response) Body() ([]byte, error) {
 	if r == nil {
 		return []byte{}, errors.New("HttpRequest.Response is nil.")
