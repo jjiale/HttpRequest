@@ -16,7 +16,10 @@ type Response struct {
 }
 
 func (r *Response) Response() *http.Response {
-	return r.resp
+	if r != nil {
+		return r.resp
+	}
+	return nil
 }
 
 func (r *Response) StatusCode() int {
@@ -27,11 +30,31 @@ func (r *Response) StatusCode() int {
 }
 
 func (r *Response) Time() string {
-	return fmt.Sprintf("%dms", r.time)
+	if r != nil {
+		return fmt.Sprintf("%dms", r.time)
+	}
+	return "0ms"
 }
 
 func (r *Response) Url() string {
-	return r.url
+	if r != nil {
+		return r.url
+	}
+	return ""
+}
+
+func (r *Response) Headers() http.Header {
+	if r != nil {
+		return r.resp.Header
+	}
+	return nil
+}
+
+func (r *Response) Cookies() []*http.Cookie {
+	if r != nil {
+		return r.resp.Cookies()
+	}
+	return []*http.Cookie{}
 }
 
 func (r *Response) Headers() map[string]string {
@@ -47,6 +70,10 @@ func (r *Response) Headers() map[string]string {
 }
 
 func (r *Response) Body() ([]byte, error) {
+	if r == nil {
+		return []byte{}, errors.New("HttpRequest.Response is nil.")
+	}
+
 	defer r.resp.Body.Close()
 
 	if len(r.body) > 0 {
@@ -66,7 +93,19 @@ func (r *Response) Body() ([]byte, error) {
 	return b, nil
 }
 
+func (r *Response) Content() (string, error) {
+	b, err := r.Body()
+	if err != nil {
+		return "", nil
+	}
+	return string(b), nil
+}
+
 func (r *Response) Json(v interface{}) error {
+	return r.Unmarshal(v)
+}
+
+func (r *Response) Unmarshal(v interface{}) error {
 	b, err := r.Body()
 	if err != nil {
 		return err
@@ -76,6 +115,13 @@ func (r *Response) Json(v interface{}) error {
 		return err
 	}
 
+	return nil
+}
+
+func (r *Response) Close() error {
+	if r != nil {
+		return r.resp.Body.Close()
+	}
 	return nil
 }
 

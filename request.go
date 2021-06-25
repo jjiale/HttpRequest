@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -18,6 +18,7 @@ import (
 
 type Request struct {
 	cli               *http.Client
+	transport         *http.Transport
 	debug             bool
 	url               string
 	method            string
@@ -25,9 +26,14 @@ type Request struct {
 	timeout           time.Duration
 	headers           map[string]string
 	cookies           map[string]string
+	username          string
+	password          string
 	data              interface{}
 	disableKeepAlives bool
 	tlsClientConfig   *tls.Config
+	jar               http.CookieJar
+	proxy             func(*http.Request) (*url.URL, error)
+	checkRedirect     func(req *http.Request, via []*http.Request) error
 }
 
 func (r *Request) DisableKeepAlives(v bool) *Request {
@@ -35,8 +41,32 @@ func (r *Request) DisableKeepAlives(v bool) *Request {
 	return r
 }
 
+func (r *Request) Jar(v http.CookieJar) *Request {
+	r.jar = v
+	return r
+}
+
+func (r *Request) CheckRedirect(v func(req *http.Request, via []*http.Request) error) *Request {
+	r.checkRedirect = v
+	return r
+}
+
+func (r *Request) TLSClient(v *tls.Config) *Request {
+	return r.SetTLSClient(v)
+}
+
 func (r *Request) SetTLSClient(v *tls.Config) *Request {
 	r.tlsClientConfig = v
+	return r
+}
+
+func (r *Request) Proxy(v func(*http.Request) (*url.URL, error)) *Request {
+	r.proxy = v
+	return r
+}
+
+func (r *Request) Transport(v *http.Transport) *Request {
+	r.transport = v
 	return r
 }
 
@@ -46,23 +76,33 @@ func (r *Request) Debug(v bool) *Request {
 	return r
 }
 
+// Get transport
+func (r *Request) getTransport() http.RoundTripper {
+	if r.transport == nil {
+		return http.DefaultTransport
+	}
+
+	r.transport.DisableKeepAlives = r.disableKeepAlives
+
+	if r.tlsClientConfig != nil {
+		r.transport.TLSClientConfig = r.tlsClientConfig
+	}
+
+	if r.proxy != nil {
+		r.transport.Proxy = r.proxy
+	}
+
+	return http.RoundTripper(r.transport)
+}
+
 // Build client
 func (r *Request) buildClient() *http.Client {
 	if r.cli == nil {
 		r.cli = &http.Client{
-			Transport: &http.Transport{
-				Dial: func(network, addr string) (net.Conn, error) {
-					conn, err := net.DialTimeout(network, addr, time.Second*r.timeout)
-					if err != nil {
-						return nil, err
-					}
-					conn.SetDeadline(time.Now().Add(time.Second * r.timeout))
-					return conn, nil
-				},
-				ResponseHeaderTimeout: time.Second * r.timeout,
-				TLSClientConfig:       r.tlsClientConfig,
-				DisableKeepAlives:     r.disableKeepAlives,
-			},
+			Transport:     r.getTransport(),
+			Jar:           r.jar,
+			CheckRedirect: r.checkRedirect,
+			Timeout:       time.Second * r.timeout,
 		}
 	}
 	return r.cli
@@ -106,6 +146,19 @@ func (r *Request) initCookies(req *http.Request) {
 	}
 }
 
+// Set basic auth
+func (r *Request) SetBasicAuth(username, password string) *Request {
+	r.username = username
+	r.password = password
+	return r
+}
+
+func (r *Request) initBasicAuth(req *http.Request) {
+	if r.username != "" && r.password != "" {
+		req.SetBasicAuth(r.username, r.password)
+	}
+}
+
 // Check application/json
 func (r *Request) isJson() bool {
 	if len(r.headers) > 0 {
@@ -125,30 +178,36 @@ func (r *Request) JSON() *Request {
 
 // Build query data
 func (r *Request) buildBody(d ...interface{}) (io.Reader, error) {
-	// GET and DELETE request dose not send body
-	if r.method == "GET" || r.method == "DELETE" {
+	if r.method == "GET" || r.method == "DELETE" || len(d) == 0 || (len(d) > 0 && d[0] == nil) {
 		return nil, nil
 	}
 
-	if len(d) == 0 || d[0] == nil {
-		return strings.NewReader(""), nil
+	switch d[0].(type) {
+	case string:
+		return strings.NewReader(d[0].(string)), nil
+	case []byte:
+		return bytes.NewReader(d[0].([]byte)), nil
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return bytes.NewReader(IntByte(d[0])), nil
+	case *bytes.Reader:
+		return d[0].(*bytes.Reader), nil
+	case *strings.Reader:
+		return d[0].(*strings.Reader), nil
+	case *bytes.Buffer:
+		return d[0].(*bytes.Buffer), nil
+	default:
+		if r.isJson() {
+			b, err := json.Marshal(d[0])
+			if err != nil {
+				return nil, err
+			}
+			return bytes.NewReader(b), nil
+		}
 	}
 
 	t := reflect.TypeOf(d[0]).String()
-	if t != "string" && !strings.Contains(t, "map[string]interface") {
-		return strings.NewReader(""), errors.New("incorrect parameter format.")
-	}
-
-	if t == "string" {
-		return strings.NewReader(d[0].(string)), nil
-	}
-
-	if r.isJson() {
-		if b, err := json.Marshal(d[0]); err != nil {
-			return nil, err
-		} else {
-			return bytes.NewReader(b), nil
-		}
+	if !strings.Contains(t, "map[string]interface") {
+		return nil, errors.New("Unsupported data type.")
 	}
 
 	data := make([]string, 0)
@@ -226,7 +285,7 @@ func buildUrl(url string, data ...interface{}) (string, error) {
 				query = append(query, param)
 			}
 		default:
-			return url, errors.New("incorrect parameter format.")
+			return url, errors.New("Unsupported data type.")
 		}
 
 	}
@@ -344,9 +403,9 @@ func (r *Request) request(method, url string, data ...interface{}) (*Response, e
 
 	r.initHeaders(req)
 	r.initCookies(req)
+	r.initBasicAuth(req)
 
 	resp, err := r.cli.Do(req)
-
 	if err != nil {
 		return nil, err
 	}
@@ -412,6 +471,7 @@ func (r *Request) sendFile(url, filename, fileinput string) (*Response, error) {
 
 	r.initHeaders(req)
 	r.initCookies(req)
+	r.initBasicAuth(req)
 	req.Header.Set("Content-Type", contentType)
 
 	resp, err := r.cli.Do(req)

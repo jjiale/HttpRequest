@@ -2,6 +2,8 @@ package HttpRequest
 
 import (
 	"crypto/tls"
+	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -20,9 +22,24 @@ func Debug(v bool) *Request {
 	return r.Debug(v)
 }
 
+func Jar(v http.CookieJar) *Request {
+	r := NewRequest()
+	return r.Jar(v)
+}
+
 func DisableKeepAlives(v bool) *Request {
 	r := NewRequest()
 	return r.DisableKeepAlives(v)
+}
+
+func CheckRedirect(v func(req *http.Request, via []*http.Request) error) *Request {
+	r := NewRequest()
+	return r.CheckRedirect(v)
+}
+
+func TLSClient(v *tls.Config) *Request {
+	r := NewRequest()
+	return r.SetTLSClient(v)
 }
 
 func SetTLSClient(v *tls.Config) *Request {
@@ -40,14 +57,29 @@ func SetCookies(cookies map[string]string) *Request {
 	return r.SetCookies(cookies)
 }
 
+func SetBasicAuth(username, password string) *Request {
+	r := NewRequest()
+	return r.SetBasicAuth(username, password)
+}
+
 func JSON() *Request {
 	r := NewRequest()
 	return r.JSON()
 }
 
+func Proxy(v func(*http.Request) (*url.URL, error)) *Request {
+	r := NewRequest()
+	return r.Proxy(v)
+}
+
 func SetTimeout(d time.Duration) *Request {
 	r := NewRequest()
 	return r.SetTimeout(d)
+}
+
+func Transport(v *http.Transport) *Request {
+	r := NewRequest()
+	return r.Transport(v)
 }
 
 // Get is a get http request
